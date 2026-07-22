@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EduManage SMS — Login</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="login-wrapper">
+    <div class="login-visual">
+      <div class="lv-top">
+        <div class="lv-brand">
+          <span class="mark">🎓</span>
+          EduManage <span style="color:#93c5fd;">SMS</span>
+        </div>
+      </div>
+      <div class="lv-headline">
+        <h1>Run your school with clarity and control.</h1>
+        <p>One connected workspace for admins, teachers, students, and parents — attendance, exams, fees, and communication in a single place.</p>
+      </div>
+      <div class="lv-stats">
+        <div><strong>3</strong><span>User roles</span></div>
+        <div><strong>10+</strong><span>Core modules</span></div>
+        <div><strong>100%</strong><span>Cloud based</span></div>
+      </div>
+    </div>
+
+    <div class="login-form-side">
+      <div class="login-box">
+        <div class="mobile-brand"><span class="mark">🎓</span> EduManage SMS</div>
+        <h1>Welcome back</h1>
+        <p class="subtitle">Sign in to your EduManage SMS account</p>
+
+        <div class="role-tabs">
+          <button class="active" data-role="admin">Admin</button>
+          <button data-role="teacher">Teacher</button>
+          <button data-role="student">Student/Parent</button>
+        </div>
+
+        <div class="error-msg" id="error-msg">Invalid email or password.</div>
+
+        <form id="login-form">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="Enter your email" required />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="Enter your password" required />
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+        </form>
+
+        <div class="hint-box" id="hint-box">
+          <strong>Demo Login (Admin):</strong><br />
+          Email: admin@school.com<br />
+          Password: admin123
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script>
+    initDB();
+
+    let currentRole = "admin";
+    const hints = {
+      admin: "<strong>Demo Login (Admin):</strong><br>Email: admin@school.com<br>Password: admin123",
+      teacher: "<strong>Demo Login (Teacher):</strong><br>Email: anita.sharma@school.com<br>Password: teacher123",
+      student: "<strong>Demo Login (Student/Parent):</strong><br>Email: aarav.parent@mail.com<br>Password: student123",
+    };
+
+    document.querySelectorAll(".role-tabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".role-tabs button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentRole = btn.getAttribute("data-role");
+        document.getElementById("hint-box").innerHTML = hints[currentRole];
+        document.getElementById("error-msg").classList.remove("show");
+      });
+    });
+
+    document.getElementById("login-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim().toLowerCase();
+      const password = document.getElementById("password").value;
+      const db = getDB();
+      const errEl = document.getElementById("error-msg");
+
+      if (currentRole === "admin") {
+        if (email === db.admin.email.toLowerCase() && password === db.admin.password) {
+          setSession("admin", "admin");
+          window.location.href = "pages/admin-dashboard.html";
+          return;
+        }
+      } else if (currentRole === "teacher") {
+        const t = db.teachers.find((t) => t.email.toLowerCase() === email && t.password === password);
+        if (t) {
+          if (t.active === false) {
+            errEl.classList.remove("show");
+            void errEl.offsetWidth;
+            errEl.textContent = "This account has been disabled. Please contact the school admin.";
+            errEl.classList.add("show");
+            return;
+          }
+          setSession("teacher", t.id);
+          window.location.href = "pages/teacher-dashboard.html";
+          return;
+        }
+      } else if (currentRole === "student") {
+        const s = db.students.find((s) => s.parentEmail.toLowerCase() === email && s.password === password);
+        if (s) {
+          if (s.active === false) {
+            errEl.classList.remove("show");
+            void errEl.offsetWidth;
+            errEl.textContent = "This account has been disabled. Please contact the school admin.";
+            errEl.classList.add("show");
+            return;
+          }
+          setSession("student", s.id);
+          window.location.href = "pages/student-dashboard.html";
+          return;
+        }
+      }
+      errEl.classList.remove("show");
+      void errEl.offsetWidth; // restart animation
+      errEl.classList.add("show");
+    });
+  </script>
+</body>
+</html>
