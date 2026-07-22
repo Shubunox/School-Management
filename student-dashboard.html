@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Dashboard</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><h3>Recent Notices</h3><a href="student-notices.html" style="font-size:13px;color:var(--primary);">View all</a></div>
+          <div id="recent-notices"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Fee Status</h3><a href="fee-status.html" style="font-size:13px;color:var(--primary);">View details</a></div>
+          <div id="fee-summary"></div>
+        </div>
+      </div>
+
+      <div class="two-col" style="margin-top: 20px;">
+        <div class="card">
+          <div class="card-header"><h3>❓ Ask Doubts</h3><a href="student-doubts.html" style="font-size:13px;color:var(--primary);">Go to section</a></div>
+          <div style="padding: 16px;">
+            <p style="color: #64748b; font-size: 14px; margin: 0 0 12px 0;">Get answers to your subject-related questions from your teachers.</p>
+            <div id="pending-doubts" style="padding: 12px; background: #fef3c7; border-radius: 6px; text-align: center; color: #92400e; font-size: 13px; font-weight: 600;"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>📚 Study Notes</h3><a href="student-notes.html" style="font-size:13px;color:var(--primary);">Browse notes</a></div>
+          <div style="padding: 16px;">
+            <p style="color: #64748b; font-size: 14px; margin: 0 0 12px 0;">Access study materials and notes shared by your teachers.</p>
+            <div id="available-notes" style="padding: 12px; background: #dbeafe; border-radius: 6px; text-align: center; color: #0c4a6e; font-size: 13px; font-weight: 600;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "student-dashboard.html", "Dashboard", student.name + "'s Parent");
+
+  const relevantKeys = Object.keys(db.attendance).filter((k) => k.startsWith(student.classId + student.section + "_"));
+  let present = 0, absent = 0, late = 0;
+  relevantKeys.forEach((k) => {
+    const status = db.attendance[k][student.id];
+    if (status === "present") present++;
+    else if (status === "absent") absent++;
+    else if (status === "late") late++;
+  });
+  const totalMarked = present + absent + late;
+  const attPct = totalMarked ? Math.round(((present + late) / totalMarked) * 100) : 0;
+
+  const studentMarks = db.marks.filter((m) => m.studentId === student.id);
+  const totalObtained = studentMarks.reduce((a, m) => a + m.marksObtained, 0);
+  const totalMax = studentMarks.reduce((a, m) => a + m.maxMarks, 0);
+  const avgPct = totalMax ? Math.round((totalObtained / totalMax) * 100) : 0;
+
+  const feeRec = db.fees.find((f) => f.studentId === student.id);
+  const feeBadge = feeRec ? (feeRec.status === "Paid" ? "badge-green" : feeRec.status === "Partial" ? "badge-orange" : "badge-red") : "badge-gray";
+
+  $("#stats-grid").innerHTML = `
+    <div class="stat-card"><div class="info"><div class="label">Class</div><div class="value" style="font-size:18px;">${getClassName(db, student.classId)}-${student.section}</div></div><div class="icon-box icon-blue">🏫</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Attendance</div><div class="value">${attPct}%</div></div><div class="icon-box icon-green">🗓️</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Average Marks</div><div class="value">${avgPct}%</div></div><div class="icon-box icon-purple">📝</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Fee Status</div><div class="value" style="font-size:16px;"><span class="badge ${feeBadge}">${feeRec ? feeRec.status : "N/A"}</span></div></div><div class="icon-box icon-orange">💰</div></div>
+  `;
+
+  const studentNotices = db.notices.filter((n) => n.audience === "All" || n.audience === "Students" || n.audience === "Parents").sort((a, b) => new Date(b.date) - new Date(a.date));
+  $("#recent-notices").innerHTML = studentNotices.length
+    ? studentNotices.slice(0, 3).map((n) => `<div class="notice-item"><div class="nt-title">${n.title}</div><div class="nt-meta">${formatDate(n.date)}</div><div class="nt-body">${n.body}</div></div>`).join("")
+    : `<div class="empty-state">No notices yet</div>`;
+
+  $("#fee-summary").innerHTML = feeRec
+    ? `
+    <div class="profile-meta-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="item"><div class="label">Term</div><div class="val">${feeRec.term}</div></div>
+      <div class="item"><div class="label">Status</div><div class="val"><span class="badge ${feeBadge}">${feeRec.status}</span></div></div>
+      <div class="item"><div class="label">Total Amount</div><div class="val">₹${feeRec.amount.toLocaleString("en-IN")}</div></div>
+      <div class="item"><div class="label">Amount Due</div><div class="val">₹${(feeRec.amount - feeRec.paid).toLocaleString("en-IN")}</div></div>
+    </div>`
+    : `<div class="empty-state">No fee record found</div>`;
+
+  // Display pending doubts count
+  const studentDoubts = db.doubts.filter(d => d.studentId === student.id);
+  const pendingDoubts = studentDoubts.filter(d => d.status === "pending").length;
+  const answeredDoubts = studentDoubts.filter(d => d.status === "answered").length;
+  
+  if (studentDoubts.length === 0) {
+    $("#pending-doubts").innerHTML = `<span>📝 Start asking your questions today!</span>`;
+  } else {
+    $("#pending-doubts").innerHTML = `<span>✓ ${answeredDoubts} answered</span> • <span>⏳ ${pendingDoubts} pending</span>`;
+  }
+
+  // Display available notes count
+  const availableNotes = db.notes.filter(n => n.classId === student.classId).length;
+  $("#available-notes").innerHTML = `<span>${availableNotes} notes available</span>`;
+</script>
+</body>
+</html>

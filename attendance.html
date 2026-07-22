@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Attendance Summary — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Attendance Summary</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="stats-grid" id="att-stats"></div>
+
+      <div class="card">
+        <div class="card-header"><h3>Daily Attendance Log</h3></div>
+        <div class="legend" style="margin-bottom:14px;">
+          <span><span class="dot" style="background:#16a34a;"></span> Present</span>
+          <span><span class="dot" style="background:#dc2626;"></span> Absent</span>
+          <span><span class="dot" style="background:#d97706;"></span> Late</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Status</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+        <div id="log-empty"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "attendance.html", "Attendance Summary", student.name + "'s Parent");
+
+  const relevantKeys = Object.keys(db.attendance).filter((k) => k.startsWith(student.classId + student.section + "_"));
+  let present = 0, absent = 0, late = 0;
+  const rows = [];
+  relevantKeys.forEach((k) => {
+    const status = db.attendance[k][student.id];
+    if (!status) return;
+    const date = k.split("_")[1];
+    rows.push({ date, status });
+    if (status === "present") present++;
+    else if (status === "absent") absent++;
+    else if (status === "late") late++;
+  });
+  rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const total = present + absent + late;
+  const pct = total ? Math.round(((present + late) / total) * 100) : 0;
+
+  $("#att-stats").innerHTML = `
+    <div class="stat-card"><div class="info"><div class="label">Attendance %</div><div class="value">${pct}%</div></div><div class="icon-box icon-blue">📊</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Days Present</div><div class="value">${present}</div></div><div class="icon-box icon-green">✅</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Days Absent</div><div class="value">${absent}</div></div><div class="icon-box icon-red">❌</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Days Late</div><div class="value">${late}</div></div><div class="icon-box icon-orange">⏰</div></div>
+  `;
+
+  if (!rows.length) {
+    $("#log-body").innerHTML = "";
+    $("#log-empty").innerHTML = `<div class="empty-state"><div class="ic">🗓️</div>No attendance records yet.</div>`;
+  } else {
+    $("#log-empty").innerHTML = "";
+    $("#log-body").innerHTML = rows
+      .map((r) => {
+        const badgeClass = r.status === "present" ? "badge-green" : r.status === "absent" ? "badge-red" : "badge-orange";
+        return `<tr><td>${formatDate(r.date)}</td><td><span class="badge ${badgeClass}">${r.status}</span></td></tr>`;
+      })
+      .join("");
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Attendance — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Attendance</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="tabs">
+        <button class="active" data-tab="mark">Mark Attendance</button>
+        <button data-tab="report">View Reports</button>
+      </div>
+
+      <!-- MARK TAB -->
+      <div id="tab-mark">
+        <div class="card">
+          <div class="form-grid-3" style="margin-bottom:16px;">
+            <div class="form-group"><label>Class</label><select id="m-class"></select></div>
+            <div class="form-group"><label>Section</label><select id="m-section"></select></div>
+            <div class="form-group"><label>Date</label><input type="date" id="m-date" /></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Roll</th><th>Name</th><th>Status</th></tr></thead>
+              <tbody id="mark-table-body"></tbody>
+            </table>
+          </div>
+          <div id="mark-empty"></div>
+          <div style="margin-top:16px;text-align:right;">
+            <button class="btn btn-primary" id="btn-save-attendance">Save Attendance</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- REPORT TAB -->
+      <div id="tab-report" style="display:none;">
+        <div class="card">
+          <div class="form-grid-3" style="margin-bottom:16px;">
+            <div class="form-group"><label>Class</label><select id="r-class"></select></div>
+            <div class="form-group"><label>Section</label><select id="r-section"></select></div>
+            <div class="form-group"><label>Date</label><input type="date" id="r-date" /></div>
+          </div>
+          <div class="legend" style="margin-bottom:14px;">
+            <span><span class="dot" style="background:#16a34a;"></span> Present</span>
+            <span><span class="dot" style="background:#dc2626;"></span> Absent</span>
+            <span><span class="dot" style="background:#d97706;"></span> Late</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Roll</th><th>Name</th><th>Status</th></tr></thead>
+              <tbody id="report-table-body"></tbody>
+            </table>
+          </div>
+          <div id="report-empty"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "attendance-admin.html", "Attendance", db.admin.name);
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#m-date").value = today;
+  $("#r-date").value = today;
+
+  function fillClassSelect(sel) {
+    sel.innerHTML = db.classes.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+  }
+  function fillSectionSelect(classSel, sectionSel) {
+    const cls = db.classes.find((c) => c.id === classSel.value);
+    sectionSel.innerHTML = cls ? cls.sections.map((s) => `<option value="${s}">${s}</option>`).join("") : "";
+  }
+
+  fillClassSelect($("#m-class"));
+  fillSectionSelect($("#m-class"), $("#m-section"));
+  fillClassSelect($("#r-class"));
+  fillSectionSelect($("#r-class"), $("#r-section"));
+
+  $("#m-class").addEventListener("change", () => { fillSectionSelect($("#m-class"), $("#m-section")); renderMarkTable(); });
+  $("#m-section").addEventListener("change", renderMarkTable);
+  $("#m-date").addEventListener("change", renderMarkTable);
+
+  $("#r-class").addEventListener("change", () => { fillSectionSelect($("#r-class"), $("#r-section")); renderReportTable(); });
+  $("#r-section").addEventListener("change", renderReportTable);
+  $("#r-date").addEventListener("change", renderReportTable);
+
+  // Tabs
+  $all(".tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $all(".tabs button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tab = btn.getAttribute("data-tab");
+      $("#tab-mark").style.display = tab === "mark" ? "block" : "none";
+      $("#tab-report").style.display = tab === "report" ? "block" : "none";
+      if (tab === "report") renderReportTable();
+    });
+  });
+
+  function attendanceKey(classId, section, date) {
+    return `${classId}${section}_${date}`;
+  }
+
+  function renderMarkTable() {
+    db = getDB();
+    const classId = $("#m-class").value;
+    const section = $("#m-section").value;
+    const date = $("#m-date").value;
+    const students = db.students.filter((s) => s.classId === classId && s.section === section);
+    const key = attendanceKey(classId, section, date);
+    const existing = db.attendance[key] || {};
+
+    if (!students.length) {
+      $("#mark-table-body").innerHTML = "";
+      $("#mark-empty").innerHTML = `<div class="empty-state">No students in this class/section.</div>`;
+      return;
+    }
+    $("#mark-empty").innerHTML = "";
+
+    $("#mark-table-body").innerHTML = students
+      .map((s) => {
+        const status = existing[s.id] || "present";
+        return `<tr>
+          <td>${s.roll}</td>
+          <td>${s.name}</td>
+          <td>
+            <select class="att-status" data-sid="${s.id}" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;">
+              <option value="present" ${status === "present" ? "selected" : ""}>Present</option>
+              <option value="absent" ${status === "absent" ? "selected" : ""}>Absent</option>
+              <option value="late" ${status === "late" ? "selected" : ""}>Late</option>
+            </select>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  $("#btn-save-attendance").addEventListener("click", () => {
+    const classId = $("#m-class").value;
+    const section = $("#m-section").value;
+    const date = $("#m-date").value;
+    const key = attendanceKey(classId, section, date);
+    const record = {};
+    $all(".att-status").forEach((sel) => {
+      record[sel.getAttribute("data-sid")] = sel.value;
+    });
+    db.attendance[key] = record;
+    saveDB(db);
+    toast("Attendance saved for " + formatDate(date));
+  });
+
+  function renderReportTable() {
+    db = getDB();
+    const classId = $("#r-class").value;
+    const section = $("#r-section").value;
+    const date = $("#r-date").value;
+    const students = db.students.filter((s) => s.classId === classId && s.section === section);
+    const key = attendanceKey(classId, section, date);
+    const record = db.attendance[key];
+
+    if (!students.length) {
+      $("#report-table-body").innerHTML = "";
+      $("#report-empty").innerHTML = `<div class="empty-state">No students in this class/section.</div>`;
+      return;
+    }
+    if (!record) {
+      $("#report-table-body").innerHTML = "";
+      $("#report-empty").innerHTML = `<div class="empty-state"><div class="ic">📭</div>No attendance recorded for this date.</div>`;
+      return;
+    }
+    $("#report-empty").innerHTML = "";
+
+    $("#report-table-body").innerHTML = students
+      .map((s) => {
+        const status = record[s.id] || "not marked";
+        const badgeClass = status === "present" ? "badge-green" : status === "absent" ? "badge-red" : status === "late" ? "badge-orange" : "badge-gray";
+        return `<tr><td>${s.roll}</td><td>${s.name}</td><td><span class="badge ${badgeClass}">${status}</span></td></tr>`;
+      })
+      .join("");
+  }
+
+  renderMarkTable();
+</script>
+</body>
+</html>

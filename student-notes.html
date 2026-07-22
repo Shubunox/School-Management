@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Study Notes — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Study Notes</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <!-- Filter Section -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header"><h3>🔍 Filter Notes</h3></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label>Filter by Subject</label>
+            <select id="subject-filter" style="padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; width: 100%;">
+              <option value="">All Subjects</option>
+              <option value="English">English</option>
+              <option value="Mathematics">Mathematics</option>
+              <option value="Science">Science</option>
+              <option value="Social Studies">Social Studies</option>
+              <option value="Computer">Computer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Search Notes</label>
+            <input type="text" id="search-notes" placeholder="Search by title or keyword..." style="padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; width: 100%;" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes Grid -->
+      <div id="notes-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;"></div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="card" style="text-align: center; padding: 48px;">
+        <div style="font-size: 48px; margin-bottom: 12px;">📚</div>
+        <h3 style="color: #64748b; margin-bottom: 8px;">No Notes Available</h3>
+        <p style="color: #94a3b8;">Check back later for study materials from your teachers.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Note Preview Modal -->
+<div class="modal" id="note-modal">
+  <div class="modal-content" style="width: 90%; max-width: 700px; max-height: 80vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding: 16px 20px;">
+      <h2 id="modal-note-title" style="margin: 0;"></h2>
+      <button data-close-modal="note-modal" style="background: none; border: none; font-size: 20px; cursor: pointer;">✕</button>
+    </div>
+    <div style="padding: 20px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+        <div class="info-box">
+          <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px;">Subject</span>
+          <div id="modal-note-subject" style="font-weight: 600; margin-top: 4px;"></div>
+        </div>
+        <div class="info-box">
+          <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px;">Uploaded by</span>
+          <div id="modal-note-teacher" style="font-weight: 600; margin-top: 4px;"></div>
+        </div>
+        <div class="info-box">
+          <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px;">Upload Date</span>
+          <div id="modal-note-date" style="font-weight: 600; margin-top: 4px;"></div>
+        </div>
+        <div class="info-box">
+          <a id="modal-note-download" href="#" style="color: #2563eb; font-weight: 600; text-decoration: none;">📥 Download PDF</a>
+        </div>
+      </div>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;">
+      <div id="modal-note-content" style="font-size: 14px; line-height: 1.6; color: #334155;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "student-notes.html", "Study Notes", student.name + "'s Parent");
+
+  let allNotes = db.notes.filter(n => n.classId === student.classId);
+
+  function renderNotes(notes) {
+    const notesGrid = $("#notes-grid");
+    const emptyState = $("#empty-state");
+
+    if (notes.length === 0) {
+      notesGrid.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+
+    emptyState.style.display = "none";
+    notesGrid.innerHTML = notes.map(note => {
+      const teacher = db.teachers.find(t => t.id === note.uploadedBy);
+      const teacherName = teacher ? teacher.name : "School";
+      
+      return `
+        <div class="card" style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; height: 100%; display: flex; flex-direction: column;" onclick="openNoteModal(${note.id})">
+          <div style="padding: 16px; flex: 1;">
+            <span class="badge badge-blue" style="font-size: 12px; margin-bottom: 8px; display: inline-block;">${note.subject}</span>
+            <h4 style="margin: 12px 0 8px 0; color: #1e293b; font-size: 15px;">${note.title}</h4>
+            <p style="margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+              ${note.content.substring(0, 100)}...
+            </p>
+          </div>
+          <div style="border-top: 1px solid #e2e8f0; padding: 12px 16px;">
+            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px;">By ${teacherName}</div>
+            <div style="font-size: 11px; color: #cbd5e1;">${formatDate(note.uploadedDate)}</div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function openNoteModal(noteId) {
+    const note = db.notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const teacher = db.teachers.find(t => t.id === note.uploadedBy);
+    const teacherName = teacher ? teacher.name : "School";
+
+    $("#modal-note-title").textContent = note.title;
+    $("#modal-note-subject").textContent = note.subject;
+    $("#modal-note-teacher").textContent = teacherName;
+    $("#modal-note-date").textContent = formatDate(note.uploadedDate);
+    $("#modal-note-content").innerHTML = note.content.replace(/\n/g, "<br>");
+    $("#modal-note-download").href = note.filePath || "#";
+
+    openModal("note-modal");
+  }
+
+  window.openNoteModal = openNoteModal;
+
+  // Filter notes
+  function filterNotes() {
+    const subjectFilter = $("#subject-filter").value;
+    const searchTerm = $("#search-notes").value.toLowerCase();
+
+    let filtered = allNotes;
+
+    if (subjectFilter) {
+      filtered = filtered.filter(n => n.subject === subjectFilter);
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(n =>
+        n.title.toLowerCase().includes(searchTerm) ||
+        n.content.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    renderNotes(filtered);
+  }
+
+  $("#subject-filter").addEventListener("change", filterNotes);
+  $("#search-notes").addEventListener("input", filterNotes);
+
+  // Initial render
+  renderNotes(allNotes);
+</script>
+</body>
+</html>

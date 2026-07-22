@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ask Doubts — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Ask Doubts</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="two-col" style="grid-template-columns: 1fr;">
+        <!-- Ask New Doubt Form -->
+        <div class="card">
+          <div class="card-header"><h3>📝 Post a New Question</h3></div>
+          <form id="doubt-form" style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="form-group">
+              <label>Subject</label>
+              <select id="doubt-subject" required style="padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px;">
+                <option value="">Select Subject</option>
+                <option value="English">English</option>
+                <option value="Mathematics">Mathematics</option>
+                <option value="Science">Science</option>
+                <option value="Social Studies">Social Studies</option>
+                <option value="Computer">Computer</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Question Title</label>
+              <input type="text" id="doubt-title" placeholder="Brief title for your question" required style="padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px;" />
+            </div>
+            <div class="form-group">
+              <label>Detailed Description</label>
+              <textarea id="doubt-description" placeholder="Explain your doubt in detail..." required rows="4" style="padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px;"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Post Question</button>
+          </form>
+        </div>
+
+        <!-- Doubts List -->
+        <div class="card" style="margin-top: 20px;">
+          <div class="card-header"><h3>❓ Your Questions</h3></div>
+          <div id="doubts-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "student-doubts.html", "Ask Doubts", student.name + "'s Parent");
+
+  // Render doubts list
+  function renderDoubts() {
+    const studentDoubts = db.doubts.filter(d => d.studentId === student.id).sort((a, b) => new Date(b.askedDate) - new Date(a.askedDate));
+    
+    if (studentDoubts.length === 0) {
+      $("#doubts-list").innerHTML = `<div class="empty-state">No questions asked yet. Ask your first question above!</div>`;
+      return;
+    }
+
+    $("#doubts-list").innerHTML = studentDoubts.map(doubt => {
+      const teacher = getTeacherById(db, doubt.teacherId);
+      const statusBadge = doubt.status === "answered" ? "badge-green" : "badge-orange";
+      const statusText = doubt.status === "answered" ? "✓ Answered" : "⏳ Pending";
+      
+      return `
+        <div class="doubt-card" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #f8fafc;">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="flex: 1;">
+              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                <span class="badge badge-blue" style="font-size: 12px;">${doubt.subject}</span>
+                <span class="badge ${statusBadge}" style="font-size: 12px;">${statusText}</span>
+              </div>
+              <h4 style="margin: 8px 0; color: #1e293b; font-size: 15px;">${doubt.title}</h4>
+              <p style="margin: 8px 0; color: #64748b; font-size: 13.5px; line-height: 1.5;">${doubt.description}</p>
+              <div style="margin-top: 12px; font-size: 12.5px; color: #94a3b8;">
+                Asked on ${formatDate(doubt.askedDate)}
+              </div>
+            </div>
+          </div>
+          
+          ${doubt.status === "answered" ? `
+            <div style="background: #f0fdf4; border-left: 3px solid #22c55e; padding: 12px; margin-top: 12px; border-radius: 4px;">
+              <div style="font-weight: 600; color: #15803d; font-size: 13px; margin-bottom: 6px;">
+                📌 Reply from ${teacher.name}
+              </div>
+              <p style="margin: 0; color: #166534; font-size: 13.5px; line-height: 1.5;">${doubt.reply}</p>
+              <div style="margin-top: 6px; font-size: 12px; color: #4ade80;">Replied on ${formatDate(doubt.repliedDate)}</div>
+            </div>
+          ` : `
+            <div style="background: #fef3c7; border-left: 3px solid #f59e0b; padding: 12px; margin-top: 12px; border-radius: 4px;">
+              <div style="color: #92400e; font-size: 12.5px;">
+                ⏳ Waiting for teacher's response...
+              </div>
+            </div>
+          `}
+        </div>
+      `;
+    }).join("");
+  }
+
+  renderDoubts();
+
+  // Handle form submission
+  $("#doubt-form").addEventListener("submit", function(e) {
+    e.preventDefault();
+    
+    const subject = $("#doubt-subject").value;
+    const title = $("#doubt-title").value;
+    const description = $("#doubt-description").value;
+
+    if (!subject || !title || !description) {
+      toast("Please fill in all fields", "warn");
+      return;
+    }
+
+    // Find teacher for this subject
+    const teacher = db.teachers.find(t => t.subject === subject && t.classes.includes(student.classId + student.section));
+    const teacherId = teacher ? teacher.id : db.teachers[0].id;
+
+    // Create new doubt
+    const newDoubt = {
+      id: uid("d"),
+      studentId: student.id,
+      subject: subject,
+      title: title,
+      description: description,
+      status: "pending",
+      askedDate: new Date().toISOString().slice(0, 10),
+      teacherId: null,
+      reply: null,
+      repliedDate: null
+    };
+
+    db.doubts.push(newDoubt);
+    saveDB(db);
+
+    // Reset form
+    $("#doubt-form").reset();
+    toast("Question posted successfully! Teacher will reply soon.", "success");
+    renderDoubts();
+  });
+</script>
+</body>
+</html>

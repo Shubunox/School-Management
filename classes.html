@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classes & Sections — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Classes & Sections</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="toolbar">
+          <div></div>
+          <button class="btn btn-primary" id="btn-add-class">+ Add Class</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Class Name</th><th>Sections</th><th>Total Students</th><th>Class Teacher(s)</th><th>Actions</th></tr></thead>
+            <tbody id="classes-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-class">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="class-modal-title">Add Class</h3>
+      <button class="modal-close" data-close-modal="modal-class">&times;</button>
+    </div>
+    <form id="class-form">
+      <input type="hidden" id="f-id" />
+      <div class="form-group"><label>Class Name</label><input type="text" id="f-name" placeholder="e.g. Class 6" required /></div>
+      <div class="form-group"><label>Sections (comma-separated)</label><input type="text" id="f-sections" placeholder="e.g. A, B, C" required /></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-class">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Class</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "classes.html", "Classes & Sections", db.admin.name);
+
+  function renderTable() {
+    db = getDB();
+    $("#classes-table-body").innerHTML = db.classes
+      .map((c) => {
+        const studentCount = db.students.filter((s) => s.classId === c.id).length;
+        const teacherNames = db.teachers.filter((t) => t.classes.some((cs) => cs.startsWith(c.id))).map((t) => t.name);
+        return `<tr>
+          <td>${c.name}</td>
+          <td>${c.sections.map((s) => `<span class="badge badge-blue">${s}</span>`).join(" ")}</td>
+          <td>${studentCount}</td>
+          <td>${teacherNames.join(", ") || "-"}</td>
+          <td class="actions-cell">
+            <button class="icon-btn" data-edit="${c.id}">✎ Edit</button>
+            <button class="icon-btn del" data-del="${c.id}">🗑</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  $("#btn-add-class").addEventListener("click", () => {
+    $("#class-form").reset();
+    $("#f-id").value = "";
+    $("#class-modal-title").textContent = "Add Class";
+    openModal("modal-class");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target.matches("[data-edit]")) {
+      const id = e.target.getAttribute("data-edit");
+      const c = db.classes.find((x) => x.id === id);
+      $("#class-modal-title").textContent = "Edit Class";
+      $("#f-id").value = c.id;
+      $("#f-name").value = c.name;
+      $("#f-sections").value = c.sections.join(", ");
+      openModal("modal-class");
+    }
+    if (e.target.matches("[data-del]")) {
+      const id = e.target.getAttribute("data-del");
+      const hasStudents = db.students.some((s) => s.classId === id);
+      if (hasStudents) {
+        toast("Cannot delete: students are assigned to this class", "error");
+        return;
+      }
+      if (confirmAction("Delete this class?")) {
+        db.classes = db.classes.filter((c) => c.id !== id);
+        saveDB(db);
+        toast("Class deleted");
+        renderTable();
+      }
+    }
+  });
+
+  $("#class-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const id = $("#f-id").value;
+    const sections = $("#f-sections").value.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const data = { name: $("#f-name").value.trim(), sections };
+
+    if (id) {
+      const idx = db.classes.findIndex((c) => c.id === id);
+      db.classes[idx] = { ...db.classes[idx], ...data };
+      toast("Class updated successfully");
+    } else {
+      data.id = uid("c");
+      db.classes.push(data);
+      toast("Class added successfully");
+    }
+    saveDB(db);
+    closeModal("modal-class");
+    renderTable();
+  });
+
+  renderTable();
+</script>
+</body>
+</html>

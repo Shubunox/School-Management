@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Enter Marks — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Enter Marks</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="form-grid-3" style="margin-bottom:16px;">
+          <div class="form-group"><label>Exam</label><select id="mk-exam"></select></div>
+          <div class="form-group"><label>My Class - Section</label><select id="mk-classsec"></select></div>
+          <div class="form-group"><label>Subject</label><input type="text" id="mk-subject" disabled /></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Roll</th><th>Name</th><th>Max Marks</th><th>Marks Obtained</th></tr></thead>
+            <tbody id="marks-table-body"></tbody>
+          </table>
+        </div>
+        <div id="marks-empty"></div>
+        <div style="margin-top:16px;text-align:right;">
+          <button class="btn btn-primary" id="btn-save-marks">Save Marks</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("teacher");
+  let db = getDB();
+  const session = getSession();
+  const teacher = getTeacherById(db, session.userId);
+  renderShell("teacher", "enter-marks.html", "Enter Marks", teacher.name);
+
+  $("#mk-subject").value = teacher.subject;
+  $("#mk-exam").innerHTML = db.exams.map((ex) => `<option value="${ex.id}">${ex.name} (${ex.term})</option>`).join("");
+  $("#mk-classsec").innerHTML = teacher.classes
+    .map((cs) => {
+      const classId = cs.slice(0, -1);
+      const sec = cs.slice(-1);
+      return `<option value="${cs}">${getClassName(db, classId)} - ${sec}</option>`;
+    })
+    .join("");
+
+  function renderMarksTable() {
+    db = getDB();
+    const examId = $("#mk-exam").value;
+    const cs = $("#mk-classsec").value;
+    const subject = teacher.subject;
+
+    if (!examId || !cs) {
+      $("#marks-table-body").innerHTML = "";
+      $("#marks-empty").innerHTML = `<div class="empty-state">No exam or class available.</div>`;
+      return;
+    }
+    const classId = cs.slice(0, -1);
+    const sec = cs.slice(-1);
+    const students = db.students.filter((s) => s.classId === classId && s.section === sec);
+
+    if (!students.length) {
+      $("#marks-table-body").innerHTML = "";
+      $("#marks-empty").innerHTML = `<div class="empty-state">No students in this class/section.</div>`;
+      return;
+    }
+    $("#marks-empty").innerHTML = "";
+
+    $("#marks-table-body").innerHTML = students
+      .map((s) => {
+        const rec = db.marks.find((m) => m.examId === examId && m.studentId === s.id && m.subject === subject);
+        return `<tr>
+          <td>${s.roll}</td>
+          <td>${s.name}</td>
+          <td><input type="number" class="mk-max" data-sid="${s.id}" value="${rec ? rec.maxMarks : 100}" style="width:90px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;" /></td>
+          <td><input type="number" class="mk-obtained" data-sid="${s.id}" value="${rec ? rec.marksObtained : ""}" style="width:90px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;" /></td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  $("#mk-exam").addEventListener("change", renderMarksTable);
+  $("#mk-classsec").addEventListener("change", renderMarksTable);
+
+  $("#btn-save-marks").addEventListener("click", () => {
+    const examId = $("#mk-exam").value;
+    const subject = teacher.subject;
+    if (!examId) return;
+    const maxInputs = $all(".mk-max");
+    const obtInputs = $all(".mk-obtained");
+
+    maxInputs.forEach((maxInput, i) => {
+      const sid = maxInput.getAttribute("data-sid");
+      const maxMarks = parseFloat(maxInput.value) || 0;
+      const marksObtained = parseFloat(obtInputs[i].value) || 0;
+      const existingIdx = db.marks.findIndex((m) => m.examId === examId && m.studentId === sid && m.subject === subject);
+      if (existingIdx > -1) {
+        db.marks[existingIdx].maxMarks = maxMarks;
+        db.marks[existingIdx].marksObtained = marksObtained;
+      } else {
+        db.marks.push({ id: uid("m"), examId, studentId: sid, subject, maxMarks, marksObtained });
+      }
+    });
+    saveDB(db);
+    toast("Marks saved successfully");
+    renderMarksTable();
+  });
+
+  renderMarksTable();
+</script>
+</body>
+</html>

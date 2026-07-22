@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Exams & Marks — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Exams & Marks</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="tabs">
+        <button class="active" data-tab="exams">Exams</button>
+        <button data-tab="marks">Enter / View Marks</button>
+      </div>
+
+      <!-- EXAMS TAB -->
+      <div id="tab-exams">
+        <div class="card">
+          <div class="toolbar"><div></div><button class="btn btn-primary" id="btn-add-exam">+ Add Exam</button></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Exam Name</th><th>Term</th><th>Date</th><th>Actions</th></tr></thead>
+              <tbody id="exams-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- MARKS TAB -->
+      <div id="tab-marks" style="display:none;">
+        <div class="card">
+          <div class="form-grid-3" style="margin-bottom:16px;">
+            <div class="form-group"><label>Exam</label><select id="mk-exam"></select></div>
+            <div class="form-group"><label>Class</label><select id="mk-class"></select></div>
+            <div class="form-group"><label>Section</label><select id="mk-section"></select></div>
+          </div>
+          <div class="form-group" style="max-width:240px;margin-bottom:14px;">
+            <label>Subject</label><select id="mk-subject"></select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Roll</th><th>Name</th><th>Max Marks</th><th>Marks Obtained</th></tr></thead>
+              <tbody id="marks-table-body"></tbody>
+            </table>
+          </div>
+          <div id="marks-empty"></div>
+          <div style="margin-top:16px;text-align:right;">
+            <button class="btn btn-primary" id="btn-save-marks">Save Marks</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-exam">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Add Exam</h3><button class="modal-close" data-close-modal="modal-exam">&times;</button></div>
+    <form id="exam-form">
+      <div class="form-group"><label>Exam Name</label><input type="text" id="f-name" placeholder="e.g. Mid-Term Exam" required /></div>
+      <div class="form-group"><label>Term</label><input type="text" id="f-term" placeholder="e.g. Term 1" required /></div>
+      <div class="form-group"><label>Date</label><input type="date" id="f-date" required /></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-exam">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Exam</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "exams-marks.html", "Exams & Marks", db.admin.name);
+
+  // Tabs
+  $all(".tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $all(".tabs button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tab = btn.getAttribute("data-tab");
+      $("#tab-exams").style.display = tab === "exams" ? "block" : "none";
+      $("#tab-marks").style.display = tab === "marks" ? "block" : "none";
+      if (tab === "marks") renderMarksTable();
+    });
+  });
+
+  function renderExamsTable() {
+    db = getDB();
+    $("#exams-table-body").innerHTML = db.exams
+      .map((ex) => `<tr><td>${ex.name}</td><td>${ex.term}</td><td>${formatDate(ex.date)}</td>
+        <td class="actions-cell"><button class="icon-btn del" data-del-exam="${ex.id}">🗑</button></td></tr>`)
+      .join("");
+  }
+
+  $("#btn-add-exam").addEventListener("click", () => {
+    $("#exam-form").reset();
+    openModal("modal-exam");
+  });
+
+  $("#exam-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    db.exams.push({ id: uid("e"), name: $("#f-name").value.trim(), term: $("#f-term").value.trim(), date: $("#f-date").value });
+    saveDB(db);
+    toast("Exam added successfully");
+    closeModal("modal-exam");
+    renderExamsTable();
+    populateMarksFilters();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target.matches("[data-del-exam]")) {
+      const id = e.target.getAttribute("data-del-exam");
+      if (confirmAction("Delete this exam? Associated marks will remain but be orphaned.")) {
+        db.exams = db.exams.filter((ex) => ex.id !== id);
+        saveDB(db);
+        toast("Exam deleted");
+        renderExamsTable();
+        populateMarksFilters();
+      }
+    }
+  });
+
+  // Marks tab
+  function populateMarksFilters() {
+    db = getDB();
+    $("#mk-exam").innerHTML = db.exams.map((ex) => `<option value="${ex.id}">${ex.name} (${ex.term})</option>`).join("");
+    $("#mk-class").innerHTML = db.classes.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+    fillMarksSection();
+    $("#mk-subject").innerHTML = db.subjects.map((s) => `<option value="${s}">${s}</option>`).join("");
+  }
+  function fillMarksSection() {
+    const cls = db.classes.find((c) => c.id === $("#mk-class").value);
+    $("#mk-section").innerHTML = cls ? cls.sections.map((s) => `<option value="${s}">${s}</option>`).join("") : "";
+  }
+
+  $("#mk-class").addEventListener("change", () => { fillMarksSection(); renderMarksTable(); });
+  $("#mk-section").addEventListener("change", renderMarksTable);
+  $("#mk-exam").addEventListener("change", renderMarksTable);
+  $("#mk-subject").addEventListener("change", renderMarksTable);
+
+  function renderMarksTable() {
+    db = getDB();
+    const examId = $("#mk-exam").value;
+    const classId = $("#mk-class").value;
+    const section = $("#mk-section").value;
+    const subject = $("#mk-subject").value;
+    if (!examId) {
+      $("#marks-table-body").innerHTML = "";
+      $("#marks-empty").innerHTML = `<div class="empty-state">No exams created yet. Add an exam first.</div>`;
+      return;
+    }
+    const students = db.students.filter((s) => s.classId === classId && s.section === section);
+
+    if (!students.length) {
+      $("#marks-table-body").innerHTML = "";
+      $("#marks-empty").innerHTML = `<div class="empty-state">No students in this class/section.</div>`;
+      return;
+    }
+    $("#marks-empty").innerHTML = "";
+
+    $("#marks-table-body").innerHTML = students
+      .map((s) => {
+        const rec = db.marks.find((m) => m.examId === examId && m.studentId === s.id && m.subject === subject);
+        return `<tr>
+          <td>${s.roll}</td>
+          <td>${s.name}</td>
+          <td><input type="number" class="mk-max" data-sid="${s.id}" value="${rec ? rec.maxMarks : 100}" style="width:90px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;" /></td>
+          <td><input type="number" class="mk-obtained" data-sid="${s.id}" value="${rec ? rec.marksObtained : ""}" style="width:90px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;" /></td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  $("#btn-save-marks").addEventListener("click", () => {
+    const examId = $("#mk-exam").value;
+    const subject = $("#mk-subject").value;
+    const maxInputs = $all(".mk-max");
+    const obtInputs = $all(".mk-obtained");
+
+    maxInputs.forEach((maxInput, i) => {
+      const sid = maxInput.getAttribute("data-sid");
+      const maxMarks = parseFloat(maxInput.value) || 0;
+      const marksObtained = parseFloat(obtInputs[i].value) || 0;
+      const existingIdx = db.marks.findIndex((m) => m.examId === examId && m.studentId === sid && m.subject === subject);
+      if (existingIdx > -1) {
+        db.marks[existingIdx].maxMarks = maxMarks;
+        db.marks[existingIdx].marksObtained = marksObtained;
+      } else {
+        db.marks.push({ id: uid("m"), examId, studentId: sid, subject, maxMarks, marksObtained });
+      }
+    });
+    saveDB(db);
+    toast("Marks saved successfully");
+    renderMarksTable();
+  });
+
+  renderExamsTable();
+  populateMarksFilters();
+</script>
+</body>
+</html>

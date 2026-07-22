@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notices — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Notices</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="card" id="notices-card">
+        <div id="notices-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "student-notices.html", "Notices", student.name + "'s Parent");
+
+  const relevant = db.notices
+    .filter((n) => n.audience === "All" || n.audience === "Students" || n.audience === "Parents")
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  $("#notices-list").innerHTML = relevant.length
+    ? relevant
+        .map(
+          (n) => `
+      <div class="notice-item">
+        <div class="nt-title">${n.title} <span class="badge badge-blue" style="margin-left:6px;">${n.audience}</span></div>
+        <div class="nt-meta">${formatDate(n.date)} · Posted by ${n.postedBy}</div>
+        <div class="nt-body">${n.body}</div>
+      </div>`
+        )
+        .join("")
+    : `<div class="empty-state"><div class="ic">📢</div>No notices available.</div>`;
+</script>
+</body>
+</html>

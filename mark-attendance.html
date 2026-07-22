@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mark Attendance — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Mark Attendance</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="form-grid-3" style="margin-bottom:16px;">
+          <div class="form-group"><label>My Class - Section</label><select id="m-classsec"></select></div>
+          <div class="form-group"><label>Date</label><input type="date" id="m-date" /></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Roll</th><th>Name</th><th>Status</th></tr></thead>
+            <tbody id="mark-table-body"></tbody>
+          </table>
+        </div>
+        <div id="mark-empty"></div>
+        <div style="margin-top:16px;text-align:right;">
+          <button class="btn btn-primary" id="btn-save-attendance">Save Attendance</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("teacher");
+  let db = getDB();
+  const session = getSession();
+  const teacher = getTeacherById(db, session.userId);
+  renderShell("teacher", "mark-attendance.html", "Mark Attendance", teacher.name);
+
+  $("#m-date").value = new Date().toISOString().slice(0, 10);
+
+  $("#m-classsec").innerHTML = teacher.classes
+    .map((cs) => {
+      const classId = cs.slice(0, -1);
+      const sec = cs.slice(-1);
+      return `<option value="${cs}">${getClassName(db, classId)} - ${sec}</option>`;
+    })
+    .join("");
+
+  function attendanceKey(cs, date) { return `${cs}_${date}`; }
+
+  function renderMarkTable() {
+    db = getDB();
+    const cs = $("#m-classsec").value;
+    if (!cs) {
+      $("#mark-table-body").innerHTML = "";
+      $("#mark-empty").innerHTML = `<div class="empty-state">No classes assigned to you.</div>`;
+      return;
+    }
+    const classId = cs.slice(0, -1);
+    const sec = cs.slice(-1);
+    const date = $("#m-date").value;
+    const students = db.students.filter((s) => s.classId === classId && s.section === sec);
+    const key = attendanceKey(cs, date);
+    const existing = db.attendance[key] || {};
+
+    if (!students.length) {
+      $("#mark-table-body").innerHTML = "";
+      $("#mark-empty").innerHTML = `<div class="empty-state">No students in this class/section.</div>`;
+      return;
+    }
+    $("#mark-empty").innerHTML = "";
+
+    $("#mark-table-body").innerHTML = students
+      .map((s) => {
+        const status = existing[s.id] || "present";
+        return `<tr>
+          <td>${s.roll}</td>
+          <td>${s.name}</td>
+          <td>
+            <select class="att-status" data-sid="${s.id}" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;">
+              <option value="present" ${status === "present" ? "selected" : ""}>Present</option>
+              <option value="absent" ${status === "absent" ? "selected" : ""}>Absent</option>
+              <option value="late" ${status === "late" ? "selected" : ""}>Late</option>
+            </select>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  $("#m-classsec").addEventListener("change", renderMarkTable);
+  $("#m-date").addEventListener("change", renderMarkTable);
+
+  $("#btn-save-attendance").addEventListener("click", () => {
+    const cs = $("#m-classsec").value;
+    if (!cs) return;
+    const date = $("#m-date").value;
+    const key = attendanceKey(cs, date);
+    const record = {};
+    $all(".att-status").forEach((sel) => { record[sel.getAttribute("data-sid")] = sel.value; });
+    db.attendance[key] = record;
+    saveDB(db);
+    toast("Attendance saved for " + formatDate(date));
+  });
+
+  renderMarkTable();
+</script>
+</body>
+</html>

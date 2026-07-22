@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reports — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Reports</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="tabs">
+        <button class="active" data-tab="academic">Academic Performance</button>
+        <button data-tab="attendance">Attendance Summary</button>
+        <button data-tab="financial">Financial Summary</button>
+      </div>
+
+      <!-- ACADEMIC -->
+      <div id="tab-academic">
+        <div class="card">
+          <div class="form-group" style="max-width:260px;margin-bottom:14px;">
+            <label>Exam</label><select id="ac-exam"></select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Class</th><th>Total Obtained</th><th>Total Max</th><th>Percentage</th><th>Grade</th></tr></thead>
+              <tbody id="academic-body"></tbody>
+            </table>
+          </div>
+          <div id="academic-empty"></div>
+        </div>
+      </div>
+
+      <!-- ATTENDANCE -->
+      <div id="tab-attendance" style="display:none;">
+        <div class="card">
+          <div class="form-grid-3" style="margin-bottom:14px;">
+            <div class="form-group"><label>Class</label><select id="at-class"></select></div>
+            <div class="form-group"><label>Section</label><select id="at-section"></select></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Days Present</th><th>Days Absent</th><th>Days Late</th><th>Total Marked Days</th><th>Attendance %</th></tr></thead>
+              <tbody id="attendance-report-body"></tbody>
+            </table>
+          </div>
+          <div id="attendance-report-empty"></div>
+        </div>
+      </div>
+
+      <!-- FINANCIAL -->
+      <div id="tab-financial" style="display:none;">
+        <div class="stats-grid" id="fin-stats"></div>
+        <div class="card">
+          <div class="card-header"><h3>Class-wise Fee Collection</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Class</th><th>Total Billed</th><th>Total Collected</th><th>Total Due</th><th>Collection %</th></tr></thead>
+              <tbody id="fin-class-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "reports.html", "Reports", db.admin.name);
+
+  $all(".tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $all(".tabs button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tab = btn.getAttribute("data-tab");
+      $("#tab-academic").style.display = tab === "academic" ? "block" : "none";
+      $("#tab-attendance").style.display = tab === "attendance" ? "block" : "none";
+      $("#tab-financial").style.display = tab === "financial" ? "block" : "none";
+      if (tab === "attendance") renderAttendanceReport();
+      if (tab === "financial") renderFinancial();
+    });
+  });
+
+  // Academic
+  $("#ac-exam").innerHTML = db.exams.map((ex) => `<option value="${ex.id}">${ex.name} (${ex.term})</option>`).join("");
+  $("#ac-exam").addEventListener("change", renderAcademic);
+
+  function renderAcademic() {
+    db = getDB();
+    const examId = $("#ac-exam").value;
+    const examMarks = db.marks.filter((m) => m.examId === examId);
+    const byStudent = {};
+    examMarks.forEach((m) => {
+      if (!byStudent[m.studentId]) byStudent[m.studentId] = { obtained: 0, max: 0 };
+      byStudent[m.studentId].obtained += m.marksObtained;
+      byStudent[m.studentId].max += m.maxMarks;
+    });
+    const studentIds = Object.keys(byStudent);
+    if (!studentIds.length) {
+      $("#academic-body").innerHTML = "";
+      $("#academic-empty").innerHTML = `<div class="empty-state">No marks entered for this exam yet.</div>`;
+      return;
+    }
+    $("#academic-empty").innerHTML = "";
+    $("#academic-body").innerHTML = studentIds
+      .map((sid) => {
+        const s = getStudentById(db, sid);
+        if (!s) return "";
+        const { obtained, max } = byStudent[sid];
+        const pct = max ? Math.round((obtained / max) * 100) : 0;
+        return `<tr><td>${s.name}</td><td>${getClassName(db, s.classId)}-${s.section}</td><td>${obtained}</td><td>${max}</td><td>${pct}%</td><td><span class="badge badge-blue">${gradeFor(pct)}</span></td></tr>`;
+      })
+      .join("");
+  }
+  renderAcademic();
+
+  // Attendance
+  $("#at-class").innerHTML = db.classes.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+  function fillAtSection() {
+    const cls = db.classes.find((c) => c.id === $("#at-class").value);
+    $("#at-section").innerHTML = cls ? cls.sections.map((s) => `<option value="${s}">${s}</option>`).join("") : "";
+  }
+  fillAtSection();
+  $("#at-class").addEventListener("change", () => { fillAtSection(); renderAttendanceReport(); });
+  $("#at-section").addEventListener("change", renderAttendanceReport);
+
+  function renderAttendanceReport() {
+    db = getDB();
+    const classId = $("#at-class").value;
+    const section = $("#at-section").value;
+    const students = db.students.filter((s) => s.classId === classId && s.section === section);
+    if (!students.length) {
+      $("#attendance-report-body").innerHTML = "";
+      $("#attendance-report-empty").innerHTML = `<div class="empty-state">No students in this class/section.</div>`;
+      return;
+    }
+    $("#attendance-report-empty").innerHTML = "";
+
+    const relevantKeys = Object.keys(db.attendance).filter((k) => k.startsWith(classId + section + "_"));
+
+    $("#attendance-report-body").innerHTML = students
+      .map((s) => {
+        let present = 0, absent = 0, late = 0;
+        relevantKeys.forEach((k) => {
+          const status = db.attendance[k][s.id];
+          if (status === "present") present++;
+          else if (status === "absent") absent++;
+          else if (status === "late") late++;
+        });
+        const total = present + absent + late;
+        const pct = total ? Math.round(((present + late) / total) * 100) : 0;
+        return `<tr><td>${s.name}</td><td>${present}</td><td>${absent}</td><td>${late}</td><td>${total}</td><td>${pct}%</td></tr>`;
+      })
+      .join("");
+  }
+
+  // Financial
+  function renderFinancial() {
+    db = getDB();
+    const totalBilled = db.fees.reduce((a, f) => a + f.amount, 0);
+    const totalCollected = db.fees.reduce((a, f) => a + f.paid, 0);
+    const totalDue = totalBilled - totalCollected;
+    const collectionPct = totalBilled ? Math.round((totalCollected / totalBilled) * 100) : 0;
+
+    $("#fin-stats").innerHTML = `
+      <div class="stat-card"><div class="info"><div class="label">Total Billed</div><div class="value">₹${totalBilled.toLocaleString("en-IN")}</div></div><div class="icon-box icon-blue">📄</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Total Collected</div><div class="value">₹${totalCollected.toLocaleString("en-IN")}</div></div><div class="icon-box icon-green">💰</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Total Due</div><div class="value">₹${totalDue.toLocaleString("en-IN")}</div></div><div class="icon-box icon-red">⏳</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Collection Rate</div><div class="value">${collectionPct}%</div></div><div class="icon-box icon-purple">📈</div></div>
+    `;
+
+    $("#fin-class-body").innerHTML = db.classes
+      .map((c) => {
+        const studentIds = db.students.filter((s) => s.classId === c.id).map((s) => s.id);
+        const classFees = db.fees.filter((f) => studentIds.includes(f.studentId));
+        const billed = classFees.reduce((a, f) => a + f.amount, 0);
+        const collected = classFees.reduce((a, f) => a + f.paid, 0);
+        const due = billed - collected;
+        const pct = billed ? Math.round((collected / billed) * 100) : 0;
+        return `<tr><td>${c.name}</td><td>₹${billed.toLocaleString("en-IN")}</td><td>₹${collected.toLocaleString("en-IN")}</td><td>₹${due.toLocaleString("en-IN")}</td><td>${pct}%</td></tr>`;
+      })
+      .join("");
+  }
+</script>
+</body>
+</html>

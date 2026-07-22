@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Manage Teachers — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+<style>
+  tr.teacher-disabled td { opacity: 0.42; }
+  tr.teacher-disabled .t-name { text-decoration: line-through; color: var(--text-light); }
+
+  .toggle-switch { position: relative; display: inline-block; width: 38px; height: 21px; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: #d1d5db; border-radius: 21px;
+    transition: background 0.25s;
+  }
+  .toggle-slider:before {
+    content: "";
+    position: absolute;
+    width: 15px; height: 15px;
+    left: 3px; top: 3px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--success); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(17px); }
+
+  #modal-confirm .modal-box { max-width: 400px; text-align: center; padding: 32px 28px; }
+  .confirm-icon { font-size: 44px; margin-bottom: 12px; display: block; animation: cardPop 0.4s var(--ease-bounce) both; }
+  .confirm-msg { font-size: 15px; color: var(--text); margin-bottom: 6px; font-weight: 600; }
+  .confirm-sub { font-size: 13px; color: var(--text-light); margin-bottom: 22px; }
+
+  .filter-pills { display: flex; gap: 6px; }
+  .pill {
+    padding: 6px 14px; border-radius: 20px; font-size: 12.5px; font-weight: 600;
+    border: 1.5px solid var(--border); background: #fff; cursor: pointer;
+    transition: all 0.18s var(--ease);
+  }
+  .pill:hover { border-color: var(--primary); color: var(--primary); }
+  .pill.active-pill { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .pill.disabled-pill.active-pill { background: #6b7280; border-color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Manage Teachers</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <!-- Stats -->
+      <div class="stats-grid" id="teacher-stats" style="margin-bottom:18px;"></div>
+
+      <div class="card">
+        <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;flex:1;">
+            <div class="search-box" style="max-width:320px;">
+              <input type="text" id="search-input" placeholder="Search by name or subject..." style="width:100%;" />
+            </div>
+            <div class="filter-pills" id="status-pills">
+              <button class="pill active-pill" data-status="all">All</button>
+              <button class="pill" data-status="active" style="border-color:#16a34a;color:#16a34a;">● Active</button>
+              <button class="pill disabled-pill" data-status="disabled" style="border-color:#6b7280;color:#6b7280;">○ Disabled</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-add-teacher">+ Add Teacher</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Subject</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Classes Assigned</th>
+                <th>Join Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="teachers-table-body"></tbody>
+          </table>
+        </div>
+        <div id="empty-state-teachers"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Modal -->
+<div class="modal-overlay" id="modal-teacher">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="teacher-modal-title">Add Teacher</h3>
+      <button class="modal-close" data-close-modal="modal-teacher">&times;</button>
+    </div>
+    <form id="teacher-form">
+      <input type="hidden" id="f-id" />
+      <div class="form-grid">
+        <div class="form-group full-span"><label>Full Name</label><input type="text" id="f-name" required /></div>
+        <div class="form-group">
+          <label>Subject</label>
+          <select id="f-subject"></select>
+        </div>
+        <div class="form-group"><label>Join Date</label><input type="date" id="f-joinDate" required /></div>
+        <div class="form-group"><label>Email (login)</label><input type="email" id="f-email" required /></div>
+        <div class="form-group"><label>Phone</label><input type="text" id="f-phone" required /></div>
+        <div class="form-group full-span">
+          <label>Assigned Classes &amp; Sections</label>
+          <div id="class-checkboxes" class="chip-row"></div>
+        </div>
+        <div class="form-group full-span"><label>Login Password</label><input type="text" id="f-password" required /></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-teacher">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Teacher</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Disable / Enable Confirm Modal -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal-box">
+    <span class="confirm-icon" id="confirm-icon">⚠️</span>
+    <div class="confirm-msg" id="confirm-msg">Disable this teacher?</div>
+    <div class="confirm-sub" id="confirm-sub">Their data will be kept. They won't be able to log in.</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-outline" data-close-modal="modal-confirm">Cancel</button>
+      <button class="btn" id="confirm-ok-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "teachers.html", "Manage Teachers", db.admin.name);
+
+  let currentStatusFilter = "all";
+  let pendingToggleId = null;
+
+  /* Migrate old records that don't have active field */
+  let migrated = false;
+  db.teachers.forEach(t => { if (t.active === undefined) { t.active = true; migrated = true; } });
+  if (migrated) saveDB(db);
+
+  /* ---- Subject select ---- */
+  $("#f-subject").innerHTML = db.subjects.map(s => `<option value="${s}">${s}</option>`).join("");
+
+  /* ---- Class checkboxes ---- */
+  function buildClassCheckboxes(selected) {
+    selected = selected || [];
+    let html = "";
+    db.classes.forEach(c => {
+      c.sections.forEach(sec => {
+        const val = c.id + sec;
+        const checked = selected.includes(val) ? "checked" : "";
+        html += `<label style="display:flex;align-items:center;gap:6px;font-size:13px;background:#f1f5f9;padding:6px 10px;border-radius:6px;cursor:pointer;">
+          <input type="checkbox" value="${val}" ${checked} /> ${c.name}-${sec}
+        </label>`;
+      });
+    });
+    $("#class-checkboxes").innerHTML = html;
+  }
+
+  /* ---- Stats ---- */
+  function renderStats() {
+    db = getDB();
+    const total = db.teachers.length;
+    const active = db.teachers.filter(t => t.active !== false).length;
+    const disabled = total - active;
+    $("#teacher-stats").innerHTML = `
+      <div class="stat-card"><div class="info"><div class="label">Total Teachers</div><div class="value">${total}</div></div><div class="icon-box icon-purple">👩‍🏫</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Active</div><div class="value">${active}</div></div><div class="icon-box icon-green">✅</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Disabled</div><div class="value">${disabled}</div></div><div class="icon-box icon-red">🚫</div></div>
+    `;
+    animateCounters(".stat-card .value", $("#teacher-stats"));
+  }
+
+  /* ---- Table ---- */
+  function renderTable() {
+    db = getDB();
+    const search = $("#search-input").value.toLowerCase();
+
+    let list = db.teachers.filter(t => {
+      const matchSearch = t.name.toLowerCase().includes(search) || t.subject.toLowerCase().includes(search);
+      const isActive = t.active !== false;
+      const matchStatus =
+        currentStatusFilter === "all" ||
+        (currentStatusFilter === "active" && isActive) ||
+        (currentStatusFilter === "disabled" && !isActive);
+      return matchSearch && matchStatus;
+    });
+
+    if (!list.length) {
+      $("#teachers-table-body").innerHTML = "";
+      $("#empty-state-teachers").innerHTML = `<div class="empty-state"><div class="ic">🔍</div>No teachers found.</div>`;
+      return;
+    }
+    $("#empty-state-teachers").innerHTML = "";
+
+    $("#teachers-table-body").innerHTML = list.map(t => {
+      const isActive = t.active !== false;
+      const classLabels = t.classes.map(cs => {
+        const cId = cs.slice(0, -1);
+        const sec = cs.slice(-1);
+        return `${getClassName(db, cId)}-${sec}`;
+      });
+      const statusBadge = isActive
+        ? `<span class="badge badge-green">Active</span>`
+        : `<span class="badge badge-gray">Disabled</span>`;
+
+      return `
+        <tr class="${isActive ? "" : "teacher-disabled"}">
+          <td class="t-name">${t.name}</td>
+          <td><span class="badge badge-blue">${t.subject}</span></td>
+          <td>${t.email}</td>
+          <td>${t.phone}</td>
+          <td>${classLabels.join(", ") || "-"}</td>
+          <td>${formatDate(t.joinDate)}</td>
+          <td>${statusBadge}</td>
+          <td>
+            <div class="actions-cell" style="align-items:center;gap:8px;">
+              <button class="icon-btn" data-edit="${t.id}" title="Edit">✎ Edit</button>
+              <label class="toggle-switch" title="${isActive ? "Click to disable" : "Click to enable"}">
+                <input type="checkbox" ${isActive ? "checked" : ""} data-toggle="${t.id}" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </td>
+        </tr>`;
+    }).join("");
+  }
+
+  /* ---- Filters ---- */
+  $("#search-input").addEventListener("input", renderTable);
+
+  $all(".pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      $all(".pill").forEach(p => p.classList.remove("active-pill"));
+      pill.classList.add("active-pill");
+      currentStatusFilter = pill.getAttribute("data-status");
+      renderTable();
+    });
+  });
+
+  /* ---- Toggle confirm ---- */
+  document.addEventListener("change", e => {
+    if (!e.target.matches("[data-toggle]")) return;
+    const id = e.target.getAttribute("data-toggle");
+    const t = getTeacherById(db, id);
+    const willDisable = !e.target.checked;
+
+    // Revert visual until confirmed
+    e.target.checked = !willDisable;
+
+    pendingToggleId = id;
+    if (willDisable) {
+      $("#confirm-icon").textContent = "🚫";
+      $("#confirm-msg").textContent = `Disable ${t.name}?`;
+      $("#confirm-sub").textContent = "Their data and class assignments are kept. They won't be able to log in until re-enabled.";
+      $("#confirm-ok-btn").className = "btn btn-danger";
+      $("#confirm-ok-btn").textContent = "Disable Teacher";
+    } else {
+      $("#confirm-icon").textContent = "✅";
+      $("#confirm-msg").textContent = `Re-enable ${t.name}?`;
+      $("#confirm-sub").textContent = "They will be able to log in and access their classes again immediately.";
+      $("#confirm-ok-btn").className = "btn btn-success";
+      $("#confirm-ok-btn").textContent = "Enable Teacher";
+    }
+    openModal("modal-confirm");
+  });
+
+  $("#confirm-ok-btn").addEventListener("click", () => {
+    if (!pendingToggleId) return;
+    const idx = db.teachers.findIndex(t => t.id === pendingToggleId);
+    const wasActive = db.teachers[idx].active !== false;
+    db.teachers[idx].active = !wasActive;
+    saveDB(db);
+    toast(wasActive ? "Teacher disabled" : "Teacher re-enabled", wasActive ? "warn" : "success");
+    pendingToggleId = null;
+    closeModal("modal-confirm");
+    renderTable();
+    renderStats();
+  });
+
+  /* ---- Add button ---- */
+  $("#btn-add-teacher").addEventListener("click", () => {
+    $("#teacher-form").reset();
+    $("#f-id").value = "";
+    $("#teacher-modal-title").textContent = "Add Teacher";
+    buildClassCheckboxes([]);
+    openModal("modal-teacher");
+  });
+
+  /* ---- Edit click ---- */
+  document.addEventListener("click", e => {
+    if (!e.target.matches("[data-edit]")) return;
+    const id = e.target.getAttribute("data-edit");
+    const t = getTeacherById(db, id);
+    $("#teacher-modal-title").textContent = "Edit Teacher";
+    $("#f-id").value = t.id;
+    $("#f-name").value = t.name;
+    $("#f-subject").value = t.subject;
+    $("#f-joinDate").value = t.joinDate;
+    $("#f-email").value = t.email;
+    $("#f-phone").value = t.phone;
+    $("#f-password").value = t.password;
+    buildClassCheckboxes(t.classes);
+    openModal("modal-teacher");
+  });
+
+  /* ---- Save form ---- */
+  $("#teacher-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const id = $("#f-id").value;
+    const selectedClasses = $all("#class-checkboxes input:checked").map(cb => cb.value);
+    const data = {
+      name: $("#f-name").value.trim(),
+      subject: $("#f-subject").value,
+      joinDate: $("#f-joinDate").value,
+      email: $("#f-email").value.trim(),
+      phone: $("#f-phone").value.trim(),
+      classes: selectedClasses,
+      password: $("#f-password").value,
+    };
+
+    if (id) {
+      const idx = db.teachers.findIndex(t => t.id === id);
+      db.teachers[idx] = { ...db.teachers[idx], ...data };
+      toast("Teacher updated successfully");
+    } else {
+      data.id = uid("t");
+      data.active = true;
+      db.teachers.push(data);
+      toast("Teacher added successfully");
+    }
+    saveDB(db);
+    closeModal("modal-teacher");
+    renderTable();
+    renderStats();
+  });
+
+  renderStats();
+  renderTable();
+</script>
+</body>
+</html>

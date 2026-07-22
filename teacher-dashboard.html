@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Teacher Dashboard — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Dashboard</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><h3>My Classes</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Class</th><th>Section</th><th>Students</th><th>Subject</th></tr></thead>
+              <tbody id="my-classes-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Notices for Teachers</h3></div>
+          <div id="notices-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("teacher");
+  const db = getDB();
+  const session = getSession();
+  const teacher = getTeacherById(db, session.userId);
+  renderShell("teacher", "teacher-dashboard.html", "Dashboard", teacher.name);
+
+  const totalStudents = teacher.classes.reduce((acc, cs) => {
+    const classId = cs.slice(0, -1);
+    const sec = cs.slice(-1);
+    return acc + db.students.filter((s) => s.classId === classId && s.section === sec).length;
+  }, 0);
+
+  $("#stats-grid").innerHTML = `
+    <div class="stat-card"><div class="info"><div class="label">My Classes</div><div class="value">${teacher.classes.length}</div></div><div class="icon-box icon-blue">🏫</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Total Students</div><div class="value">${totalStudents}</div></div><div class="icon-box icon-green">🎓</div></div>
+    <div class="stat-card"><div class="info"><div class="label">Subject</div><div class="value" style="font-size:18px;">${teacher.subject}</div></div><div class="icon-box icon-purple">📘</div></div>
+  `;
+
+  $("#my-classes-body").innerHTML = teacher.classes
+    .map((cs) => {
+      const classId = cs.slice(0, -1);
+      const sec = cs.slice(-1);
+      const count = db.students.filter((s) => s.classId === classId && s.section === sec).length;
+      return `<tr><td>${getClassName(db, classId)}</td><td>${sec}</td><td>${count}</td><td>${teacher.subject}</td></tr>`;
+    })
+    .join("");
+
+  const teacherNotices = db.notices.filter((n) => n.audience === "All" || n.audience === "Teachers").sort((a, b) => new Date(b.date) - new Date(a.date));
+  $("#notices-list").innerHTML = teacherNotices.length
+    ? teacherNotices
+        .slice(0, 4)
+        .map((n) => `<div class="notice-item"><div class="nt-title">${n.title}</div><div class="nt-meta">${formatDate(n.date)}</div><div class="nt-body">${n.body}</div></div>`)
+        .join("")
+    : `<div class="empty-state">No notices yet</div>`;
+</script>
+</body>
+</html>

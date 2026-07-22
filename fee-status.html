@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fee Status — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Fee Status</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content" id="fee-content"></div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "fee-status.html", "Fee Status", student.name + "'s Parent");
+
+  const feeRecords = db.fees.filter((f) => f.studentId === student.id);
+
+  if (!feeRecords.length) {
+    $("#fee-content").innerHTML = `<div class="card"><div class="empty-state"><div class="ic">💰</div>No fee records found.</div></div>`;
+  } else {
+    const totalAmount = feeRecords.reduce((a, f) => a + f.amount, 0);
+    const totalPaid = feeRecords.reduce((a, f) => a + f.paid, 0);
+    const totalDue = totalAmount - totalPaid;
+
+    const cardsHtml = feeRecords
+      .map((feeRec) => {
+        const due = feeBalance(feeRec);
+        const badgeClass = feeRec.status === "Paid" ? "badge-green" : feeRec.status === "Partial" ? "badge-orange" : "badge-red";
+        const pct = feeRec.amount ? Math.round((feeRec.paid / feeRec.amount) * 100) : 0;
+        const payments = getPaymentsForFee(db, feeRec.id);
+        const rows = payments.length
+          ? payments
+              .map(
+                (p) => `<tr>
+                  <td>${formatDate(p.date)}</td>
+                  <td>${p.receiptNo}</td>
+                  <td class="num">₹${p.amount.toLocaleString("en-IN")}</td>
+                  <td>${p.method}</td>
+                  <td><button class="icon-btn" data-receipt="${p.id}">⬇ Receipt</button></td>
+                </tr>`
+              )
+              .join("")
+          : `<tr><td colspan="5" style="text-align:center;color:var(--text-light);">No payments logged yet.</td></tr>`;
+
+        return `
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header"><h3>${feeRec.term}</h3><span class="badge ${badgeClass}">${feeRec.status}</span></div>
+          <div style="margin-bottom:18px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span>Payment Progress</span><span>${pct}%</span></div>
+            <div class="progress-bar"><div class="fill" data-target="${pct}%"></div></div>
+          </div>
+          <div class="profile-meta-grid" style="margin-bottom:18px;">
+            <div class="item"><div class="label">Total Fee</div><div class="val">₹${feeRec.amount.toLocaleString("en-IN")}</div></div>
+            <div class="item"><div class="label">Amount Paid</div><div class="val">₹${feeRec.paid.toLocaleString("en-IN")}</div></div>
+            <div class="item"><div class="label">Amount Due</div><div class="val">₹${due.toLocaleString("en-IN")}</div></div>
+            <div class="item"><div class="label">Due Date</div><div class="val">${formatDate(feeRec.dueDate)}</div></div>
+          </div>
+          <h4 style="font-size:13.5px;margin-bottom:10px;">Payment History</h4>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Receipt No</th><th class="num">Amount</th><th>Method</th><th>Receipt</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    $("#fee-content").innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="info"><div class="label">Total Fee</div><div class="value">₹${totalAmount.toLocaleString("en-IN")}</div></div><div class="icon-box icon-blue">💰</div></div>
+        <div class="stat-card"><div class="info"><div class="label">Amount Paid</div><div class="value">₹${totalPaid.toLocaleString("en-IN")}</div></div><div class="icon-box icon-green">✅</div></div>
+        <div class="stat-card"><div class="info"><div class="label">Amount Due</div><div class="value">₹${totalDue.toLocaleString("en-IN")}</div></div><div class="icon-box icon-red">⏳</div></div>
+      </div>
+      ${cardsHtml}
+    `;
+    animateProgressBars($("#fee-content"));
+
+    document.addEventListener("click", (e) => {
+      if (e.target.matches("[data-receipt]")) {
+        const p = db.payments.find((x) => x.id === e.target.getAttribute("data-receipt"));
+        const f = db.fees.find((x) => x.id === p.feeId);
+        openReceipt("EduManage SMS", student, getClassName(db, student.classId) + "-" + student.section, f, p);
+      }
+    });
+  }
+</script>
+</body>
+</html>

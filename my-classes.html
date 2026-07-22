@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Classes & Subjects — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">My Classes & Subjects</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content" id="classes-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-roster">
+  <div class="modal-box modal-lg">
+    <div class="modal-header"><h3 id="roster-title">Class Roster</h3><button class="modal-close" data-close-modal="modal-roster">&times;</button></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Roll</th><th>Name</th><th>Gender</th><th>Parent</th><th>Parent Phone</th></tr></thead>
+        <tbody id="roster-body"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline" data-close-modal="modal-roster">Close</button></div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("teacher");
+  const db = getDB();
+  const session = getSession();
+  const teacher = getTeacherById(db, session.userId);
+  renderShell("teacher", "my-classes.html", "My Classes & Subjects", teacher.name);
+
+  if (!teacher.classes.length) {
+    $("#classes-content").innerHTML = `<div class="empty-state"><div class="ic">🏫</div>No classes assigned yet.</div>`;
+  } else {
+    $("#classes-content").innerHTML = `
+      <div class="stats-grid">
+        ${teacher.classes
+          .map((cs) => {
+            const classId = cs.slice(0, -1);
+            const sec = cs.slice(-1);
+            const count = db.students.filter((s) => s.classId === classId && s.section === sec).length;
+            return `<div class="stat-card">
+              <div class="info">
+                <div class="label">${getClassName(db, classId)} - Section ${sec}</div>
+                <div class="value">${count} students</div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-roster="${cs}">View Roster</button>
+            </div>`;
+          })
+          .join("")}
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Subject Taught</h3></div>
+        <span class="badge badge-blue" style="font-size:14px;">${teacher.subject}</span>
+      </div>
+    `;
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.matches("[data-roster]")) {
+      const cs = e.target.getAttribute("data-roster");
+      const classId = cs.slice(0, -1);
+      const sec = cs.slice(-1);
+      const students = db.students.filter((s) => s.classId === classId && s.section === sec);
+      $("#roster-title").textContent = `${getClassName(db, classId)} - Section ${sec} Roster`;
+      $("#roster-body").innerHTML = students
+        .map((s) => `<tr><td>${s.roll}</td><td>${s.name}</td><td>${s.gender}</td><td>${s.parentName}</td><td>${s.parentPhone}</td></tr>`)
+        .join("");
+      openModal("modal-roster");
+    }
+  });
+</script>
+</body>
+</html>

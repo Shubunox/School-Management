@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notices & Announcements — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Notices & Announcements</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="toolbar">
+          <div></div>
+          <button class="btn btn-primary" id="btn-add-notice">+ Post Notice</button>
+        </div>
+        <div id="notices-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-notice">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Post Notice</h3><button class="modal-close" data-close-modal="modal-notice">&times;</button></div>
+    <form id="notice-form">
+      <div class="form-group"><label>Title</label><input type="text" id="f-title" required /></div>
+      <div class="form-group"><label>Message</label><textarea id="f-body" rows="4" required></textarea></div>
+      <div class="form-group">
+        <label>Audience</label>
+        <select id="f-audience">
+          <option>All</option><option>Students</option><option>Parents</option><option>Teachers</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-notice">Cancel</button>
+        <button type="submit" class="btn btn-primary">Post Notice</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "notices.html", "Notices & Announcements", db.admin.name);
+
+  function renderList() {
+    db = getDB();
+    const sorted = [...db.notices].sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (!sorted.length) {
+      $("#notices-list").innerHTML = `<div class="empty-state"><div class="ic">📢</div>No notices posted yet.</div>`;
+      return;
+    }
+    $("#notices-list").innerHTML = sorted
+      .map(
+        (n) => `
+      <div class="notice-item">
+        <div style="display:flex;justify-content:space-between;align-items:start;">
+          <div>
+            <div class="nt-title">${n.title} <span class="badge badge-blue" style="margin-left:6px;">${n.audience}</span></div>
+            <div class="nt-meta">${formatDate(n.date)} · Posted by ${n.postedBy}</div>
+          </div>
+          <button class="icon-btn del" data-del="${n.id}">🗑</button>
+        </div>
+        <div class="nt-body">${n.body}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  $("#btn-add-notice").addEventListener("click", () => {
+    $("#notice-form").reset();
+    openModal("modal-notice");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target.matches("[data-del]")) {
+      const id = e.target.getAttribute("data-del");
+      if (confirmAction("Delete this notice?")) {
+        db.notices = db.notices.filter((n) => n.id !== id);
+        saveDB(db);
+        toast("Notice deleted");
+        renderList();
+      }
+    }
+  });
+
+  $("#notice-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    db.notices.push({
+      id: uid("n"),
+      title: $("#f-title").value.trim(),
+      body: $("#f-body").value.trim(),
+      audience: $("#f-audience").value,
+      date: new Date().toISOString().slice(0, 10),
+      postedBy: "Admin",
+    });
+    saveDB(db);
+    toast("Notice posted successfully");
+    closeModal("modal-notice");
+    renderList();
+  });
+
+  renderList();
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Profile — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">My Profile</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="profile-header">
+          <div class="profile-avatar" id="p-avatar"></div>
+          <div>
+            <div style="font-size:19px;font-weight:700;" id="p-name"></div>
+            <div style="color:var(--text-light);font-size:13.5px;" id="p-classinfo"></div>
+          </div>
+        </div>
+        <div class="profile-meta-grid" id="p-meta"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Parent / Guardian Information</h3></div>
+        <div class="profile-meta-grid" id="p-parent"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("student");
+  const db = getDB();
+  const session = getSession();
+  const student = getStudentById(db, session.userId);
+  renderShell("student", "profile.html", "My Profile", student.name + "'s Parent");
+
+  $("#p-avatar").textContent = initials(student.name);
+  $("#p-name").textContent = student.name;
+  $("#p-classinfo").textContent = `${getClassName(db, student.classId)} - Section ${student.section} · Roll #${student.roll}`;
+
+  $("#p-meta").innerHTML = `
+    <div class="item"><div class="label">Gender</div><div class="val">${student.gender}</div></div>
+    <div class="item"><div class="label">Date of Birth</div><div class="val">${formatDate(student.dob)} (Age ${calcAge(student.dob)})</div></div>
+    <div class="item"><div class="label">Admission Date</div><div class="val">${formatDate(student.admissionDate)}</div></div>
+    <div class="item"><div class="label">Address</div><div class="val">${student.address || "-"}</div></div>
+  `;
+
+  $("#p-parent").innerHTML = `
+    <div class="item"><div class="label">Name</div><div class="val">${student.parentName}</div></div>
+    <div class="item"><div class="label">Phone</div><div class="val">${student.parentPhone}</div></div>
+    <div class="item"><div class="label">Email</div><div class="val">${student.parentEmail}</div></div>
+  `;
+</script>
+</body>
+</html>

@@ -1,0 +1,469 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fee Management — EduManage SMS</title>
+<link rel="stylesheet" href="../css/style.css" />
+<style>
+  /* ---- Fee Management: professional refinements (scoped to this page) ---- */
+  .content { max-width: 1240px; }
+
+  #fee-stats .stat-card {
+    align-items: stretch;
+    padding: 0;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+  }
+  #fee-stats .stat-card:hover { transform: none; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
+  #fee-stats .stat-card:hover .icon-box { transform: none; }
+  #fee-stats .stat-card { position: relative; padding: 18px 20px 18px 22px; }
+  #fee-stats .stat-card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  #fee-stats .stat-card:nth-child(1)::before { background: var(--primary); }
+  #fee-stats .stat-card:nth-child(2)::before { background: var(--success); }
+  #fee-stats .stat-card:nth-child(3)::before { background: var(--warning); }
+  #fee-stats .stat-card:nth-child(4)::before { background: var(--danger); }
+  #fee-stats .info .label { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); }
+  #fee-stats .info .value { font-size: 24px; font-weight: 700; margin-top: 6px; letter-spacing: -0.2px; }
+  #fee-stats .icon-box { width: 38px; height: 38px; border-radius: 8px; font-size: 16px; }
+  #fee-stats .icon-box svg { width: 18px; height: 18px; }
+
+  .fee-card-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 18px;
+  }
+  .fee-card-header h3 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.1px; }
+  .fee-card-header .sub { font-size: 12.5px; color: var(--text-light); margin-top: 2px; }
+
+  #fees-table-body tr { animation: none; }
+  .badge { animation: none; border-radius: 4px; font-weight: 700; letter-spacing: 0.2px; }
+  .badge:hover { transform: none; }
+  .badge-green { background: #ecfdf3; color: #027a48; border: 1px solid #abefc6; }
+  .badge-orange { background: #fffaeb; color: #b54708; border: 1px solid #fedf89; }
+  .badge-red { background: #fef3f2; color: #b42318; border: 1px solid #fecdca; }
+
+  table th { font-size: 11.5px; letter-spacing: 0.5px; color: #475569; background: #f8fafc; border-bottom: 1px solid var(--border); }
+  table td { font-size: 13.5px; color: #1e293b; }
+  table td.num, table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table td.num.due-amt { font-weight: 600; }
+
+  .icon-btn { background: transparent; border: 1px solid var(--border); font-weight: 600; color: #475569; }
+  .icon-btn:hover { background: #f8fafc; transform: none; border-color: #cbd5e1; }
+  .icon-btn.del:hover { background: #fef3f2; color: var(--danger); border-color: #fecdca; }
+
+  .toolbar input[type="text"], .toolbar select { font-size: 13px; }
+  .toolbar input[type="text"]:focus, .toolbar select:focus {
+    outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+
+  #btn-add-fee { font-weight: 600; letter-spacing: 0.1px; box-shadow: 0 1px 2px rgba(37,99,235,0.25); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand" id="sidebar-brand"></div>
+    <nav id="sidebar-nav"></nav>
+    <div class="logout-box"><a href="#" data-logout style="color:#fca5a5;font-size:13px;">⏻ Logout</a></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="topbar-title">Fee Management</h2>
+      <div class="user-chip"><span id="user-name"></span><div class="avatar" id="user-avatar"></div></div>
+    </div>
+
+    <div class="content">
+      <div class="stats-grid" id="fee-stats"></div>
+
+      <div class="card">
+        <div class="fee-card-header">
+          <div>
+            <h3>Fee Records</h3>
+            <div class="sub">Track payments and outstanding balances by student</div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search by student name..." />
+            <select id="filter-status">
+              <option value="">All Status</option>
+              <option value="Paid">Paid</option>
+              <option value="Partial">Partial</option>
+              <option value="Unpaid">Unpaid</option>
+            </select>
+          </div>
+          <button class="btn btn-outline" id="btn-add-student">+ Add Student</button>
+          <button class="btn btn-primary" id="btn-add-fee">+ Add Fee Record</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Class</th><th>Term</th><th class="num">Amount</th><th class="num">Paid</th><th class="num">Due</th><th>Due Date</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="fees-table-body"></tbody>
+          </table>
+        </div>
+        <div id="empty-fees"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Fee Record (total amount + term + due date only — the
+     "paid" amount is never edited directly, it only grows via logged
+     payments recorded through the "Record Payment" action below). -->
+<div class="modal-overlay" id="modal-fee">
+  <div class="modal-box">
+    <div class="modal-header"><h3 id="fee-modal-title">Add Fee Record</h3><button class="modal-close" data-close-modal="modal-fee">&times;</button></div>
+    <form id="fee-form">
+      <input type="hidden" id="f-id" />
+      <div class="form-group"><label>Student</label><select id="f-studentId" required></select></div>
+      <div class="form-grid">
+        <div class="form-group"><label>Term</label><input type="text" id="f-term" placeholder="e.g. Term 1" required /></div>
+        <div class="form-group"><label>Due Date</label><input type="date" id="f-dueDate" required /></div>
+        <div class="form-group full-span"><label>Total Fees for the Term (₹)</label><input type="number" id="f-amount" min="0" required /></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-light);margin-top:-6px;">Payments are logged separately using the "Record Payment" button once this record is saved.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-fee">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Record</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Record a Payment against a fee record -->
+<div class="modal-overlay" id="modal-payment">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Record Payment</h3><button class="modal-close" data-close-modal="modal-payment">&times;</button></div>
+    <div id="payment-context" style="font-size:13px;color:var(--text-light);margin-bottom:14px;"></div>
+    <form id="payment-form">
+      <input type="hidden" id="p-feeId" />
+      <div class="form-grid">
+        <div class="form-group"><label>Amount Received (₹)</label><input type="number" id="p-amount" min="1" required /></div>
+        <div class="form-group"><label>Payment Date</label><input type="date" id="p-date" required /></div>
+        <div class="form-group"><label>Payment Method</label>
+          <select id="p-method">
+            <option>Cash</option><option>Card</option><option>Bank Transfer</option><option>UPI</option><option>Cheque</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Note (optional)</label><input type="text" id="p-note" placeholder="e.g. Installment 2" /></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-payment">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Payment &amp; Generate Receipt</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Payment History for a fee record -->
+<div class="modal-overlay" id="modal-history">
+  <div class="modal-box modal-lg">
+    <div class="modal-header"><h3>Payment History</h3><button class="modal-close" data-close-modal="modal-history">&times;</button></div>
+    <div id="history-content"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-close-modal="modal-history">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quick "Add Student" — lightweight version of the full Manage Students
+     form so a new student's basic record + contact info can be created
+     without leaving the Fee Management page. -->
+<div class="modal-overlay" id="modal-student">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Add Student</h3><button class="modal-close" data-close-modal="modal-student">&times;</button></div>
+    <form id="student-form">
+      <div class="form-grid">
+        <div class="form-group full-span"><label>Full Name</label><input type="text" id="s-name" required /></div>
+        <div class="form-group"><label>Roll No / ID</label><input type="text" id="s-roll" required /></div>
+        <div class="form-group"><label>Class</label><select id="s-classId" required></select></div>
+        <div class="form-group"><label>Section</label><select id="s-section" required></select></div>
+        <div class="form-group"><label>Contact Phone</label><input type="text" id="s-phone" required /></div>
+        <div class="form-group"><label>Contact Email</label><input type="email" id="s-email" required /></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-light);margin-top:-6px;">For full profile details (DOB, address, parent portal login, etc.) use the "Manage Students" page.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-student">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Student</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+  requireRole("admin");
+  let db = getDB();
+  renderShell("admin", "fees.html", "Fee Management", db.admin.name);
+
+  const SCHOOL_NAME = "EduManage SMS";
+
+  function computeStatus(amount, paid) {
+    return computeFeeStatus(amount, paid);
+  }
+
+  function renderStats() {
+    db = getDB();
+    const totalAmount = db.fees.reduce((a, f) => a + f.amount, 0);
+    const totalPaid = db.fees.reduce((a, f) => a + f.paid, 0);
+    const totalDue = totalAmount - totalPaid;
+    const unpaidCount = db.fees.filter((f) => f.status === "Unpaid").length;
+    const icons = {
+      total: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+      collected: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+      due: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+      unpaid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    };
+    $("#fee-stats").innerHTML = `
+      <div class="stat-card"><div class="info"><div class="label">Total Fee Amount</div><div class="value">₹${totalAmount.toLocaleString("en-IN")}</div></div><div class="icon-box icon-blue">${icons.total}</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Total Collected</div><div class="value">₹${totalPaid.toLocaleString("en-IN")}</div></div><div class="icon-box icon-green">${icons.collected}</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Total Due</div><div class="value">₹${totalDue.toLocaleString("en-IN")}</div></div><div class="icon-box icon-orange">${icons.due}</div></div>
+      <div class="stat-card"><div class="info"><div class="label">Unpaid Records</div><div class="value">${unpaidCount}</div></div><div class="icon-box icon-red">${icons.unpaid}</div></div>
+    `;
+  }
+
+  function populateStudentSelect() {
+    $("#f-studentId").innerHTML = db.students.map((s) => `<option value="${s.id}">${s.name} (${getClassName(db, s.classId)}-${s.section})</option>`).join("");
+  }
+
+  function populateClassSectionSelects() {
+    const classSel = $("#s-classId");
+    classSel.innerHTML = db.classes.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+    classSel.addEventListener("change", populateSectionOptions);
+    populateSectionOptions();
+  }
+  function populateSectionOptions() {
+    const c = db.classes.find((x) => x.id === $("#s-classId").value) || db.classes[0];
+    $("#s-section").innerHTML = (c ? c.sections : []).map((sec) => `<option value="${sec}">${sec}</option>`).join("");
+  }
+
+  function renderTable() {
+    db = getDB();
+    const search = $("#search-input").value.toLowerCase();
+    const statusFilter = $("#filter-status").value;
+    let list = db.fees.filter((f) => {
+      const s = getStudentById(db, f.studentId);
+      if (!s) return false;
+      const matchesSearch = s.name.toLowerCase().includes(search);
+      const matchesStatus = !statusFilter || f.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+
+    if (!list.length) {
+      $("#fees-table-body").innerHTML = "";
+      $("#empty-fees").innerHTML = `<div class="empty-state"><div class="ic">🔍</div>No fee records found.</div>`;
+      return;
+    }
+    $("#empty-fees").innerHTML = "";
+
+    $("#fees-table-body").innerHTML = list
+      .map((f) => {
+        const s = getStudentById(db, f.studentId);
+        const due = feeBalance(f);
+        const badgeClass = f.status === "Paid" ? "badge-green" : f.status === "Partial" ? "badge-orange" : "badge-red";
+        return `<tr>
+          <td>${s ? s.name : "Unknown"}</td>
+          <td>${s ? getClassName(db, s.classId) + "-" + s.section : "-"}</td>
+          <td>${f.term}</td>
+          <td class="num">₹${f.amount.toLocaleString("en-IN")}</td>
+          <td class="num">₹${f.paid.toLocaleString("en-IN")}</td>
+          <td class="num due-amt" style="${due > 0 ? "color:var(--danger)" : ""}">₹${due.toLocaleString("en-IN")}</td>
+          <td>${formatDate(f.dueDate)}</td>
+          <td><span class="badge ${badgeClass}">${f.status}</span></td>
+          <td class="actions-cell">
+            ${due > 0 ? `<button class="icon-btn" data-pay="${f.id}">💳 Pay</button>` : ""}
+            <button class="icon-btn" data-history="${f.id}">🧾 History</button>
+            <button class="icon-btn" data-edit="${f.id}">✎ Edit</button>
+            <button class="icon-btn del" data-del="${f.id}">🗑</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  $("#search-input").addEventListener("input", renderTable);
+  $("#filter-status").addEventListener("change", renderTable);
+
+  $("#btn-add-fee").addEventListener("click", () => {
+    $("#fee-form").reset();
+    $("#f-id").value = "";
+    $("#fee-modal-title").textContent = "Add Fee Record";
+    openModal("modal-fee");
+  });
+
+  $("#btn-add-student").addEventListener("click", () => {
+    $("#student-form").reset();
+    populateClassSectionSelects();
+    openModal("modal-student");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target.matches("[data-edit]")) {
+      const id = e.target.getAttribute("data-edit");
+      const f = db.fees.find((x) => x.id === id);
+      $("#fee-modal-title").textContent = "Edit Fee Record";
+      $("#f-id").value = f.id;
+      $("#f-studentId").value = f.studentId;
+      $("#f-term").value = f.term;
+      $("#f-dueDate").value = f.dueDate;
+      $("#f-amount").value = f.amount;
+      openModal("modal-fee");
+    }
+    if (e.target.matches("[data-del]")) {
+      const id = e.target.getAttribute("data-del");
+      if (confirmAction("Delete this fee record? Its payment history will also be removed.")) {
+        db.fees = db.fees.filter((f) => f.id !== id);
+        db.payments = db.payments.filter((p) => p.feeId !== id);
+        saveDB(db);
+        toast("Fee record deleted");
+        renderTable();
+        renderStats();
+      }
+    }
+    if (e.target.matches("[data-pay]")) {
+      const id = e.target.getAttribute("data-pay");
+      const f = db.fees.find((x) => x.id === id);
+      const s = getStudentById(db, f.studentId);
+      $("#payment-form").reset();
+      $("#p-feeId").value = f.id;
+      $("#p-date").value = new Date().toISOString().slice(0, 10);
+      $("#p-amount").max = feeBalance(f);
+      $("#payment-context").innerHTML =
+        `<b>${s.name}</b> — ${f.term}<br/>Total Fee: ₹${f.amount.toLocaleString("en-IN")} · Paid so far: ₹${f.paid.toLocaleString("en-IN")} · <span style="color:var(--danger);font-weight:600;">Balance Due: ₹${feeBalance(f).toLocaleString("en-IN")}</span>`;
+      openModal("modal-payment");
+    }
+    if (e.target.matches("[data-history]")) {
+      const id = e.target.getAttribute("data-history");
+      const f = db.fees.find((x) => x.id === id);
+      const s = getStudentById(db, f.studentId);
+      const payments = getPaymentsForFee(db, f.id);
+      const rows = payments.length
+        ? payments
+            .map(
+              (p) => `<tr>
+                <td>${formatDate(p.date)}</td>
+                <td>${p.receiptNo}</td>
+                <td class="num">₹${p.amount.toLocaleString("en-IN")}</td>
+                <td>${p.method}</td>
+                <td>${p.note || "-"}</td>
+                <td><button class="icon-btn" data-reprint="${p.id}">🧾 Reprint</button></td>
+              </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="6" style="text-align:center;color:var(--text-light);">No payments logged yet.</td></tr>`;
+      $("#history-content").innerHTML = `
+        <div style="margin-bottom:12px;font-size:13.5px;">
+          <b>${s.name}</b> — ${f.term} &nbsp;|&nbsp; Total: ₹${f.amount.toLocaleString("en-IN")} &nbsp;|&nbsp; Paid: ₹${f.paid.toLocaleString("en-IN")} &nbsp;|&nbsp;
+          <span style="color:${feeBalance(f) > 0 ? "var(--danger)" : "var(--success)"};font-weight:600;">Balance: ₹${feeBalance(f).toLocaleString("en-IN")}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Receipt No</th><th class="num">Amount</th><th>Method</th><th>Note</th><th>Receipt</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+      openModal("modal-history");
+    }
+    if (e.target.matches("[data-reprint]")) {
+      const id = e.target.getAttribute("data-reprint");
+      const p = db.payments.find((x) => x.id === id);
+      const f = db.fees.find((x) => x.id === p.feeId);
+      const s = getStudentById(db, f.studentId);
+      openReceipt(SCHOOL_NAME, s, getClassName(db, s.classId) + "-" + s.section, f, p);
+    }
+  });
+
+  $("#fee-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const id = $("#f-id").value;
+    const amount = parseFloat($("#f-amount").value) || 0;
+    const data = {
+      studentId: $("#f-studentId").value,
+      term: $("#f-term").value.trim(),
+      dueDate: $("#f-dueDate").value,
+      amount,
+    };
+
+    if (id) {
+      const idx = db.fees.findIndex((f) => f.id === id);
+      db.fees[idx] = { ...db.fees[idx], ...data, status: computeStatus(amount, db.fees[idx].paid) };
+      toast("Fee record updated");
+    } else {
+      data.paid = 0;
+      data.status = "Unpaid";
+      data.paidDate = null;
+      data.id = uid("f");
+      db.fees.push(data);
+      toast("Fee record added");
+    }
+    saveDB(db);
+    closeModal("modal-fee");
+    renderTable();
+    renderStats();
+  });
+
+  $("#payment-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const feeId = $("#p-feeId").value;
+    const fee = db.fees.find((f) => f.id === feeId);
+    const amount = parseFloat($("#p-amount").value) || 0;
+    const balance = feeBalance(fee);
+
+    if (amount <= 0) { toast("Enter a valid payment amount", "error"); return; }
+    if (amount > balance) {
+      if (!confirmAction(`This exceeds the remaining balance of ₹${balance.toLocaleString("en-IN")}. Record it anyway?`)) return;
+    }
+
+    const payment = recordPayment(db, feeId, amount, $("#p-date").value, $("#p-method").value, $("#p-note").value.trim());
+    saveDB(db);
+    closeModal("modal-payment");
+    toast(`Payment of ₹${amount.toLocaleString("en-IN")} recorded — opening receipt…`);
+    renderTable();
+    renderStats();
+
+    const s = getStudentById(db, fee.studentId);
+    openReceipt(SCHOOL_NAME, s, getClassName(db, s.classId) + "-" + s.section, fee, payment);
+  });
+
+  $("#student-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const newStudent = {
+      id: uid("s"),
+      active: true,
+      name: $("#s-name").value.trim(),
+      roll: $("#s-roll").value.trim(),
+      classId: $("#s-classId").value,
+      section: $("#s-section").value,
+      dob: "",
+      gender: "",
+      parentName: "",
+      parentPhone: $("#s-phone").value.trim(),
+      parentEmail: $("#s-email").value.trim(),
+      address: "",
+      admissionDate: new Date().toISOString().slice(0, 10),
+      password: "student123",
+    };
+    db.students.push(newStudent);
+    saveDB(db);
+    toast("Student added. You can now create a fee record for them.");
+    closeModal("modal-student");
+    populateStudentSelect();
+    // Immediately prompt to add the new student's fee record
+    $("#fee-form").reset();
+    $("#f-id").value = "";
+    $("#fee-modal-title").textContent = "Add Fee Record";
+    populateStudentSelect();
+    $("#f-studentId").value = newStudent.id;
+    openModal("modal-fee");
+  });
+
+  populateStudentSelect();
+  renderStats();
+  renderTable();
+</script>
+</body>
+</html>
